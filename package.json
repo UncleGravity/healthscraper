@@ -7,11 +7,15 @@
     "ios": "react-native run-ios",
     "lint": "eslint .",
     "start": "react-native start",
-    "test": "jest"
+    "test": "jest",
+    "clean": "rm -rf ./ios/build",
+    "deploy": "FORCE_BUNDLING=true yarn run ios"
   },
   "dependencies": {
+    "@kingstinct/react-native-healthkit": "^5.4.0",
     "react": "18.2.0",
-    "react-native": "0.71.4"
+    "react-native": "0.71.4",
+    "react-native-toast-message": "^2.1.6"
   },
   "devDependencies": {
     "@babel/core": "^7.20.0",
