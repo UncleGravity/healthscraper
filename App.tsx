@@ -1,7 +1,9 @@
+// ALT NAME: HEALTHRAISER
 import React, {Component} from 'react';
 import {View, Text, TouchableOpacity} from 'react-native';
-import HealthKit, { HKUnit, HKQuantityTypeIdentifier, HKCategoryTypeIdentifier, HKUnits } from '@kingstinct/react-native-healthkit';
+import HealthKit, { HKUnit, HKQuantityTypeIdentifier, HKCategoryTypeIdentifier, HKUnits, HKStatisticsOptions, GenericQueryOptions} from '@kingstinct/react-native-healthkit';
 import Toast from 'react-native-toast-message';
+import queryWorkouts from '@kingstinct/react-native-healthkit/lib/typescript/src/utils/queryWorkouts';
 
 type AppState = {};
 
@@ -10,15 +12,19 @@ class App extends Component<{}, AppState> {
   componentDidMount() {
     this.requestHealthKitAuthorization();
   }
-
+ 
+  ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+  // 
   async handlePressGetAuthStatus() {
     const isAvailable = await HealthKit.isHealthDataAvailable();
     /* Read latest sample of any data */
-    const result = await HealthKit.authorizationStatusFor(HKQuantityTypeIdentifier.bodyFatPercentage);
+    const result = await HealthKit.authorizationStatusFor(HKQuantityTypeIdentifier.stepCount);
     console.log(`HealthKit Auth Status: ${result}`)
     Toast.show({text1: `HealthKit Auth Status: ${result}`, type: 'success'});
   };
 
+  ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+  // 
   async requestHealthKitAuthorization() {
 
     const isAvailable = await HealthKit.isHealthDataAvailable();
@@ -29,16 +35,27 @@ class App extends Component<{}, AppState> {
       return;
     }
 
-    await HealthKit.requestAuthorization([HKQuantityTypeIdentifier.bodyFatPercentage]); // request read permission for bodyFatPercentage
+    await HealthKit.requestAuthorization([HKQuantityTypeIdentifier.stepCount]); // request read permission for bodyFatPercentage
   }
 
+  ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+  // 
   async exportHistoricalHealthData() {
-    const result = await HealthKit.getMostRecentQuantitySample(HKQuantityTypeIdentifier.bodyFatPercentage, HKUnits.Percent); // read latest sample
-    const json_result = JSON.stringify(result);
+    const endDate = new Date(Date.now());
+    const startDate = new Date(Date.now() - (7 * 24 * 60 * 60 * 1000)); // 7 days ago
+    // const from = new Date(Date.now() - 48 * 60 * 60 * 1000)
+    const result = await HealthKit.getMostRecentQuantitySample(HKQuantityTypeIdentifier.stepCount, HKUnits.Count); // read latest sample
+    // const last_48_hours_bf = await HealthKit.queryStatisticsForQuantity(HKQuantityTypeIdentifier.stepCount, [HKStatisticsOptions.separateBySource], startDate);
+    const last_7_days_steps = await HealthKit.queryQuantitySamples(HKQuantityTypeIdentifier.stepCount, {from: startDate, to: endDate});
+    // const get_sources_list = await HealthKit.querySources(HKQuantityTypeIdentifier.bodyFatPercentage);
+    // const json_result = JSON.stringify(result);
     console.log(result?.quantity);
-    Toast.show({text1: `Last BF%: ${result?.quantity}`, type: 'info'});
+    console.log(JSON.stringify(last_7_days_steps));
+    Toast.show({text1: `Last Step Count: ${result?.quantity}`, type: 'info'});
   }
 
+  ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+  // Render
   render() {
     return (
       <View style={{flex: 1, justifyContent: 'center', alignItems: 'center'}}>
