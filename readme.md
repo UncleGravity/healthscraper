@@ -38,3 +38,8 @@ To add Healthkit support to your application's Capabilities
 - In the main view select '+ Capability' and double click 'HealthKit'
 
 To enable access to clinical data types, check the Clinical Health Records box.
+
+## Bundle the app, and run it on device without metro or xcode
+```bash
+yarn deploy
+```

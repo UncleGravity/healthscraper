@@ -5,7 +5,8 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   StyleSheet,
-  TextInput,
+  Modal,
+  Keyboard,
 } from 'react-native';
 import HealthKit, {
   HKUnit,
@@ -19,6 +20,9 @@ import HealthKit, {
 import Toast from 'react-native-toast-message';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
+
+import Button from './components/Button';
+import Input from './components/Input';
 
 const API_ENDPOINT = 'https://b934-220-135-157-221.jp.ngrok.io/hkapi';
 // const API_ENDPOINT = 'https://b934-220-135-157-221.jp.ngrok.io/test';
@@ -136,11 +140,6 @@ const ALL_METRIC_TYPES = [
   // HKQuantityTypeIdentifier.appleSleepingWristTemperature
 ];
 
-type ButtonProps = {
-  onPress: () => void;
-  title: string;
-};
-
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // EXPORT DATA
 const requestHealthKitAuthorization = async () => {
@@ -163,11 +162,16 @@ const requestHealthKitAuthorization = async () => {
 const HealthRaiserApp = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [apiEndpoint, setApiEndpoint] = useState('');
+  const [isModalVisible, setIsModalVisible] = useState(false);
 
   useEffect(() => {
     requestHealthKitAuthorization();
     loadApiEndpoint();
   }, []);
+
+  const toggleModal = () => {
+    setIsModalVisible(!isModalVisible);
+  };
 
   const loadApiEndpoint = async () => {
     try {
@@ -188,6 +192,8 @@ const HealthRaiserApp = () => {
       setApiEndpoint(newApiEndpoint);
       console.log('Saving API_ENDPOINT: ' + newApiEndpoint)
       await AsyncStorage.setItem('API_ENDPOINT', newApiEndpoint);
+      Keyboard.dismiss(); // Dismiss the keyboard
+      toggleModal(); // Hide the modal
     } catch (error) {
       // Error handling; display an error message or handle it as necessary
     }
@@ -258,22 +264,32 @@ const HealthRaiserApp = () => {
     <View style={styles.container}>
       <Text style={styles.title}>HealthKit Data Exporter</Text>
 
-      <View style={styles.inputContainer}>
-        <TextInput
-          style={styles.input}
-          onChangeText={(text) => setApiEndpoint(text)}
-          value={apiEndpoint}
-          placeholder="Enter API_ENDPOINT..."
-        />
-        <TouchableOpacity onPress={() => saveApiEndpoint(apiEndpoint)} style={styles.saveButton}>
-          <Text style={styles.buttonText}>Save</Text>
-        </TouchableOpacity>
-      </View>
+      <Button onPress={toggleModal} title="Set API Endpoint" />
 
+      <Modal
+        animationType="slide"
+        transparent={false}
+        visible={isModalVisible}
+        onRequestClose={toggleModal}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.inputContainer}>
+            <Input
+              onChangeText={(text) => setApiEndpoint(text)}
+              value={apiEndpoint}
+              placeholder="Enter API_ENDPOINT..."
+            />
+            <TouchableOpacity onPress={() => saveApiEndpoint(apiEndpoint)} style={styles.saveButton}>
+              <Text style={styles.buttonText}>Save</Text>
+            </TouchableOpacity>
+          </View>
+          <Button onPress={toggleModal} title="Close" />
+        </View>
+      </Modal>
 
-      <Button onPress={handlePressGetAuthStatus} title="Healthkit Auth Status" />
+      {/* <Button onPress={handlePressGetAuthStatus} title="Healthkit Auth Status" /> */}
       <Button onPress={exportHistoricalHealthData} title="Export Last 7 Days Data" />
-      <Button onPress={testFunction} title="Test" />
+      {/* <Button onPress={testFunction} title="Test" /> */}
 
       {isLoading && (
         <ActivityIndicator
@@ -283,16 +299,10 @@ const HealthRaiserApp = () => {
         />
       )}
 
-      <Toast/>
+      <Toast />
     </View>
   );
 };
-
-const Button: React.FC<ButtonProps> = ({ onPress, title }) => (
-  <TouchableOpacity onPress={onPress} style={styles.button}>
-    <Text style={styles.buttonText}>{title}</Text>
-  </TouchableOpacity>
-);
 
 const styles = StyleSheet.create({
   container: {
@@ -344,6 +354,12 @@ const styles = StyleSheet.create({
   },
   loadingIndicator: {
     marginTop: 20,
+  },
+  modalContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16,
   },
 });
 
