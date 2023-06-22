@@ -3,6 +3,7 @@
 // Maybe use uptimekuma to check if I haven't uploaded data in a while.
 
 import React, { useState, useEffect } from 'react';
+
 import {
   Switch,
   View,
@@ -13,6 +14,7 @@ import {
   Modal,
   Keyboard,
 } from 'react-native';
+
 import HealthKit, {
   HKUnit,
   HKQuantityTypeIdentifier,
@@ -22,9 +24,9 @@ import HealthKit, {
   GenericQueryOptions,
   UnitOfTime,
 } from '@kingstinct/react-native-healthkit';
+
 import Toast from 'react-native-toast-message';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import axios from 'axios';
 
 import Button from './components/Button';
 import Input from './components/Input';
@@ -46,137 +48,20 @@ import BackgroundGeolocation, {
   ConnectivityChangeEvent
 } from "react-native-background-geolocation";
 
-const API_ENDPOINT = 'https://b934-220-135-157-221.jp.ngrok.io/hkapi';
-// const API_ENDPOINT = 'https://b934-220-135-157-221.jp.ngrok.io/test';
+import BackgroundFetch from 'react-native-background-fetch';
 
-const ALL_CATEGORY_TYPES = [
-  // Categories
-  HKCategoryTypeIdentifier.sleepAnalysis,
-  // HKCategoryTypeIdentifier.audioExposureEvent,
-  // HKCategoryTypeIdentifier.environmentalAudioExposureEvent,
-  // HKCategoryTypeIdentifier.headphoneAudioExposureEvent,
-  // HKCategoryTypeIdentifier.highHeartRateEvent,
-  // HKCategoryTypeIdentifier.lowHeartRateEvent,
-  // HKCategoryTypeIdentifier.irregularHeartRhythmEvent,
-  // HKCategoryTypeIdentifier.sleepChanges
-];
+import {
+  ALL_METRIC_TYPES,
+  ALL_CATEGORY_TYPES,
+  requestHealthKitAuthorization,
+  exportHistoricalHealthData
+} from './components/healthkit';
 
-const ALL_METRIC_TYPES = [
-  // Metrics
-  HKQuantityTypeIdentifier.bodyMassIndex,
-  HKQuantityTypeIdentifier.bodyFatPercentage,
-  // HKQuantityTypeIdentifier.height,
-  HKQuantityTypeIdentifier.bodyMass,
-  HKQuantityTypeIdentifier.leanBodyMass,
-  // HKQuantityTypeIdentifier.waistCircumference,
-  HKQuantityTypeIdentifier.stepCount,
-  HKQuantityTypeIdentifier.distanceWalkingRunning,
-  // HKQuantityTypeIdentifier.distanceCycling,
-  // HKQuantityTypeIdentifier.distanceWheelchair,
-  HKQuantityTypeIdentifier.basalEnergyBurned,
-  HKQuantityTypeIdentifier.activeEnergyBurned,
-  // HKQuantityTypeIdentifier.flightsClimbed,
-  // HKQuantityTypeIdentifier.nikeFuel,
-  // HKQuantityTypeIdentifier.appleExerciseTime,
-  // HKQuantityTypeIdentifier.pushCount,
-  // HKQuantityTypeIdentifier.distanceSwimming,
-  // HKQuantityTypeIdentifier.swimmingStrokeCount,
-  HKQuantityTypeIdentifier.vo2Max,
-  // HKQuantityTypeIdentifier.distanceDownhillSnowSports,
-  HKQuantityTypeIdentifier.appleStandTime,
-  HKQuantityTypeIdentifier.heartRate,
-  HKQuantityTypeIdentifier.bodyTemperature,
-  // HKQuantityTypeIdentifier.basalBodyTemperature,
-  HKQuantityTypeIdentifier.bloodPressureSystolic,
-  HKQuantityTypeIdentifier.bloodPressureDiastolic,
-  HKQuantityTypeIdentifier.respiratoryRate,
-  HKQuantityTypeIdentifier.restingHeartRate,
-  HKQuantityTypeIdentifier.walkingHeartRateAverage,
-  HKQuantityTypeIdentifier.heartRateVariabilitySDNN,
-  HKQuantityTypeIdentifier.oxygenSaturation,
-  // HKQuantityTypeIdentifier.peripheralPerfusionIndex,
-  HKQuantityTypeIdentifier.bloodGlucose,
-  // HKQuantityTypeIdentifier.numberOfTimesFallen,
-  // HKQuantityTypeIdentifier.electrodermalActivity,
-  // HKQuantityTypeIdentifier.inhalerUsage,
-  // HKQuantityTypeIdentifier.insulinDelivery,
-  // HKQuantityTypeIdentifier.bloodAlcoholContent,
-  // HKQuantityTypeIdentifier.forcedVitalCapacity,
-  // HKQuantityTypeIdentifier.forcedExpiratoryVolume1,
-  // HKQuantityTypeIdentifier.peakExpiratoryFlowRate,
-  HKQuantityTypeIdentifier.environmentalAudioExposure,
-  HKQuantityTypeIdentifier.headphoneAudioExposure,
-  HKQuantityTypeIdentifier.dietaryFatTotal,
-  HKQuantityTypeIdentifier.dietaryFatPolyunsaturated,
-  HKQuantityTypeIdentifier.dietaryFatMonounsaturated,
-  HKQuantityTypeIdentifier.dietaryFatSaturated,
-  HKQuantityTypeIdentifier.dietaryCholesterol,
-  HKQuantityTypeIdentifier.dietarySodium,
-  HKQuantityTypeIdentifier.dietaryCarbohydrates,
-  HKQuantityTypeIdentifier.dietaryFiber,
-  HKQuantityTypeIdentifier.dietarySugar,
-  HKQuantityTypeIdentifier.dietaryEnergyConsumed,
-  HKQuantityTypeIdentifier.dietaryProtein,
-  HKQuantityTypeIdentifier.dietaryVitaminA,
-  HKQuantityTypeIdentifier.dietaryVitaminB6,
-  HKQuantityTypeIdentifier.dietaryVitaminB12,
-  HKQuantityTypeIdentifier.dietaryVitaminC,
-  HKQuantityTypeIdentifier.dietaryVitaminD,
-  HKQuantityTypeIdentifier.dietaryVitaminE,
-  HKQuantityTypeIdentifier.dietaryVitaminK,
-  HKQuantityTypeIdentifier.dietaryCalcium,
-  HKQuantityTypeIdentifier.dietaryIron,
-  HKQuantityTypeIdentifier.dietaryThiamin,
-  HKQuantityTypeIdentifier.dietaryRiboflavin,
-  HKQuantityTypeIdentifier.dietaryNiacin,
-  HKQuantityTypeIdentifier.dietaryFolate,
-  HKQuantityTypeIdentifier.dietaryBiotin,
-  HKQuantityTypeIdentifier.dietaryPantothenicAcid,
-  HKQuantityTypeIdentifier.dietaryPhosphorus,
-  HKQuantityTypeIdentifier.dietaryIodine,
-  HKQuantityTypeIdentifier.dietaryMagnesium,
-  HKQuantityTypeIdentifier.dietaryZinc,
-  HKQuantityTypeIdentifier.dietarySelenium,
-  HKQuantityTypeIdentifier.dietaryCopper,
-  HKQuantityTypeIdentifier.dietaryManganese,
-  HKQuantityTypeIdentifier.dietaryChromium,
-  HKQuantityTypeIdentifier.dietaryMolybdenum,
-  HKQuantityTypeIdentifier.dietaryChloride,
-  HKQuantityTypeIdentifier.dietaryPotassium,
-  HKQuantityTypeIdentifier.dietaryCaffeine,
-  HKQuantityTypeIdentifier.dietaryWater,
-  // HKQuantityTypeIdentifier.sixMinuteWalkTestDistance,
-  // HKQuantityTypeIdentifier.walkingSpeed,
-  // HKQuantityTypeIdentifier.walkingStepLength,
-  // HKQuantityTypeIdentifier.walkingAsymmetryPercentage,
-  // HKQuantityTypeIdentifier.walkingDoubleSupportPercentage, 
-  // HKQuantityTypeIdentifier.stairAscentSpeed,
-  // HKQuantityTypeIdentifier.stairDescentSpeed,
-  // HKQuantityTypeIdentifier.uvExposure,
-  HKQuantityTypeIdentifier.appleMoveTime,
-  // HKQuantityTypeIdentifier.appleWalkingSteadiness,
-  // HKQuantityTypeIdentifier.numberOfAlcoholicBeverages,
-  // HKQuantityTypeIdentifier.atrialFibrillationBurden,
-  // HKQuantityTypeIdentifier.underwaterDepth,
-  // HKQuantityTypeIdentifier.waterTemperature,
-  // HKQuantityTypeIdentifier.appleSleepingWristTemperature
-];
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// EXPORT DATA
-const requestHealthKitAuthorization = async () => {
-  const isAvailable = await HealthKit.isHealthDataAvailable();
-
-  if (!isAvailable) {
-    console.log('HealthKit is not available on this device!');
-    Toast.show({ text1: `HealthKit is not available on this device!`, type: 'error' });
-    return;
-  }
-
-  await HealthKit.requestAuthorization(ALL_METRIC_TYPES); // request read permission
-  await HealthKit.requestAuthorization(ALL_CATEGORY_TYPES); // request read permission
-
-};
+import {
+  configureBackgroundGeolocation,
+  loadGeoEnabledState,
+  saveGeoEnabledState,
+} from './components/background-geolocation';
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -184,164 +69,116 @@ const requestHealthKitAuthorization = async () => {
 const HealthRaiserApp = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [apiEndpoint, setApiEndpoint] = useState('');
+  const [geoApiEndpoint, setGeoApiEndpoint] = useState('');
   const [isModalVisible, setIsModalVisible] = useState(false);
+  const [lastGeoSyncDate, setLastGeoSyncDate] = useState('');
+  const [lastHkSyncDate, setLastHkSyncDate] = useState('');
+  const [bgGeoEnabled, setBgGeoEnabled] = useState(false);
+  const [hkSyncEnabled, setHkSyncEnabled] = useState(false);
+  const [location, setLocation] = useState('');
 
   useEffect(() => {
     requestHealthKitAuthorization();
-    loadApiEndpoint();
+    loadAsyncStorageData();
   }, []);
 
   const toggleModal = () => {
     setIsModalVisible(!isModalVisible);
   };
 
-  const loadApiEndpoint = async () => {
+  const loadAsyncStorageData = async () => {
     try {
-      const savedApiEndpoint = await AsyncStorage.getItem('API_ENDPOINT');
-      if (savedApiEndpoint !== null) {
-        setApiEndpoint(savedApiEndpoint);
-      } else {
-        // Set a default value if it's not saved before.
-        setApiEndpoint('https://33ca-143-244-49-17.sa.ngrok.io/test');
+      // Get data from AsyncStorage
+      const storedApiEndpoint = await AsyncStorage.getItem('API_ENDPOINT');
+      const storedGeoApiEndpoint = await AsyncStorage.getItem('GEO_API_ENDPOINT');
+      const storedLastGeoSyncDate = await AsyncStorage.getItem('LAST_GEO_SYNC_DATE');
+      const storedLastHkSyncDate = await AsyncStorage.getItem('LAST_HK_SYNC_DATE');
+      const storedBgGeoEnabled = await AsyncStorage.getItem('BG_GEO_ENABLED');
+      const storedHkSyncEnabled = await AsyncStorage.getItem('HK_SYNC_ENABLED');
+
+      // Update state with retrieved values
+      if (storedApiEndpoint !== null) {
+        setApiEndpoint(storedApiEndpoint);
+      }
+      if (storedGeoApiEndpoint !== null) {
+        setGeoApiEndpoint(storedGeoApiEndpoint);
+      }
+      if (storedLastGeoSyncDate !== null) {
+        setLastGeoSyncDate(storedLastGeoSyncDate);
+      }
+      if (storedLastHkSyncDate !== null) {
+        setLastHkSyncDate(storedLastHkSyncDate);
+      }
+      if (storedBgGeoEnabled !== null) {
+        setBgGeoEnabled(JSON.parse(storedBgGeoEnabled));
+      }
+      if (storedHkSyncEnabled !== null) {
+        setHkSyncEnabled(JSON.parse(storedHkSyncEnabled));
       }
     } catch (error) {
-      // Error handling; display an error message or handle it as necessary
+      // Handle error
+      console.error('Error loading data from AsyncStorage:', error);
     }
   };
 
-  const saveApiEndpoint = async (newApiEndpoint: string) => {
+  const saveEndpoints = async (newApiEndpoint: string, newGeoApiEndpoint: string) => {
     try {
       setApiEndpoint(newApiEndpoint);
+      setGeoApiEndpoint(newGeoApiEndpoint);
+
       console.log('Saving API_ENDPOINT: ' + newApiEndpoint)
       await AsyncStorage.setItem('API_ENDPOINT', newApiEndpoint);
+
+      console.log('Saving GEO_API_ENDPOINT: ' + newGeoApiEndpoint)
+      await AsyncStorage.setItem('GEO_API_ENDPOINT', newGeoApiEndpoint);  
+
+      BackgroundGeolocation.setConfig({
+        url: newGeoApiEndpoint
+      });
+
       Keyboard.dismiss(); // Dismiss the keyboard
       toggleModal(); // Hide the modal
+
     } catch (error) {
       // Error handling; display an error message or handle it as necessary
+      Toast.show({ text1: 'Error saving endpoints', type: 'error' });
     }
-  };  
-  
-  ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-  // FUNC: HANDLE GET AUTH STATUS
-  const handlePressGetAuthStatus = async () => {
-    const result = await HealthKit.authorizationStatusFor(HKQuantityTypeIdentifier.appleMoveTime);
-    console.log(`HealthKit Auth Status: ${result}`);
-    Toast.show({ text1: `HealthKit Auth Status: ${result}`, type: 'success' });
-  };
-
-  const testFunction = async () => {
-    // const lastSleep = await HealthKit.getMostRecentCategorySample(HKCategoryTypeIdentifier.sleepAnalysis);
-    // console.log("latest sleep: " + JSON.stringify(lastSleep));
-
-    const sleep = await HealthKit.queryCategorySamples(HKCategoryTypeIdentifier.sleepAnalysis, { from: new Date(2023, 0, 1), to: new Date(2023, 2, 14) });
-    console.log("sleep: " + JSON.stringify(sleep));
   };
 
   ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
   // FUNC: EXPORT DATA
-  const exportHistoricalHealthData = async () => {
+  const handleHealthExportButtonPress = async () => {
+    if (apiEndpoint === '') {
+      Toast.show({ text1: 'Please enter an API endpoint', type: 'error' });
+      return;
+    }
     setIsLoading(true);
-  
-    const days = 30;
-    const endDate = new Date(Date.now());
-    const startDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000); // 30 days ago
-
-    // random day in 2018
-    // const startDate = new Date(2018, 6, 29);
-    // const endDate = new Date(2018, 6, 30);
-  
-    const metrics = ALL_METRIC_TYPES.map((type) =>
-      HealthKit.queryQuantitySamples(type, { from: startDate, to: endDate })
-    );
-
-    const categories = ALL_CATEGORY_TYPES.map((type) =>
-      HealthKit.queryCategorySamples(type, { from: startDate, to: endDate })
-    );
-  
-    try {
-      const allData = await Promise.all([...metrics, ...categories]);
-      // const combinedData = allData.flat().filter(data => data.quantityType === HKQuantityTypeIdentifier.heartRate);
-      const combinedData = allData.flat();
-      console.log(JSON.stringify(combinedData));
-      console.log("combinedData.length: " + combinedData.length)
-  
-      // Send data to API endpoint
-      const response = await axios.post(apiEndpoint, JSON.stringify(combinedData), {
-        headers: {
-          "Content-Type": "application/json",
-        },
-      });
-  
-      console.log(`Response status: ${response.status}, message: ${response.data}`);
-      Toast.show({ text1: `Response status: ${response.status}, message: ${response.data}`, type: 'success' });
-    } catch (error) {
-      console.error('Error sending data to API:', error);
-      Toast.show({ text1: 'Error sending data to API', type: 'error' });
-    } finally {
-      setIsLoading(false);
-    }
+    await exportHistoricalHealthData(apiEndpoint);
+    setIsLoading(false);
   };
 
-  const configureBackgroundGeolocation = async () => {
+  const handleLocationExportButtonPress = async () => {
 
-    let token = await BackgroundGeolocation.findOrCreateTransistorAuthorizationToken("vieratech", "unclegravity");
+    if (geoApiEndpoint === '') {
+      Toast.show({ text1: 'Please enter the Maps API endpoint', type: 'error' });
+      return;
+    }
 
-    BackgroundGeolocation.ready({
-      // Geolocation Config
-      desiredAccuracy: BackgroundGeolocation.DESIRED_ACCURACY_NAVIGATION, // iOS only, change to DESIRED_ACCURACY_HIGH for cross-platform support.
-      distanceFilter: 10,
-      // Activity Recognition
-      stopTimeout: 5,
-      // Application config
-      debug: true, // <-- enable this hear sounds for background-geolocation life-cycle.
-      logLevel: BackgroundGeolocation.LOG_LEVEL_VERBOSE,
-      stopOnTerminate: false,   // <-- Allow the background-service to continue tracking when user closes the app.
-      startOnBoot: true,        // <-- Auto start tracking when device is powered-up.
-      // HTTP / SQLite config
-      // url: 'https://livelygrandstruct.angelviera.repl.co/geo',
-      url: 'https://edbd-220-135-157-221.ngrok-free.app/maps',
-      // url: 'https://tracker.transistorsoft.com/unclegravity',
-      batchSync: true,       // <-- [Default: false] If set to false, will cause error in my server, because my server expects a batch of locations (an array)
-      autoSync: true,         // <-- [Default: true] Set true to sync each location to server as it arrives.
-      maxBatchSize: 100,
-      autoSyncThreshold: 10,
-      headers: {              // <-- Optional HTTP headers
-        "X-FOO": "bar"
-      },
-      // transistorAuthorizationToken: token
-      // params: {               // <-- Optional HTTP params
-      //   "auth_token": "maybe_your_server_authenticates_via_token_YES?"
-      // }
-    }).then((state) => {
-      setBgGeoEnabled(state.enabled)
-      console.log("- BackgroundGeolocation is configured and ready: ", state.enabled);
+    if( !bgGeoEnabled ) {
+      Toast.show({ text1: 'Location tracking is currently disabled', type: 'error' });
+      return;
+    }
+
+    BackgroundGeolocation.sync().then((records) => {
+      console.log("[sync] success: ", records);
+      Toast.show({ text1: 'Success. Inserted ' + records.length + ' records', type: 'success' });
+    }).catch((error) => {
+      console.log("[sync] FAILURE: ", error);
+      Toast.show({ text1: 'Sync failure', type: 'error' });
     });
-  };
-
-  const loadGeoEnabledState = async () => {
-    try {
-      const savedEnabledState = await AsyncStorage.getItem('BACKGROUND_GEOLOCATION_ENABLED');
-      if (savedEnabledState !== null) {
-        setBgGeoEnabled(savedEnabledState === 'true');
-        console.log("Loaded geo plugin state: " + savedEnabledState);
-      }
-    } catch (error) {
-      // Error handling; display an error message or handle it as necessary
-    }
-  };
-
-  const setGeoEnabledState = async (value: boolean) => {
-    try {
-      await AsyncStorage.setItem('BACKGROUND_GEOLOCATION_ENABLED', value.toString());
-      setBgGeoEnabled(value);
-      console.log("Saved geo plugin state: " + value);
-    } catch (error) {
-      // Error handling; display an error message or handle it as necessary
-    }
-  };
-
-  const [bgGeoEnabled, setBgGeoEnabled] = React.useState(false);
-  const [location, setLocation] = React.useState('');
+  }
+  ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+  // GEO STUFF
 
   React.useEffect(() => {
     /// 1.  Subscribe to events.
@@ -362,6 +199,25 @@ const HealthRaiserApp = () => {
       console.log('[onProviderChange]', event);
     })
 
+    const onHttpChange:Subscription = BackgroundGeolocation.onHttp((response) => {
+      let status = response.status;
+      let success = response.success;
+      let responseText = response.responseText;
+      console.log("[onHttp] ", response);
+
+      if (success) {
+        // Toast.show({ text1: 'Data uploaded successfully', type: 'success' });
+        console.log("Data uploaded successfully");
+        const now = new Date().toISOString();
+        AsyncStorage.setItem('LAST_GEO_SYNC_DATE', now);
+        setLastGeoSyncDate(now);
+      }
+    });
+
+    const onEnabledChange:Subscription = BackgroundGeolocation.onEnabledChange((enabled) => {
+      console.log("[onEnabledChange] ", enabled);
+    });
+
     /// 2. ready the plugin.
     configureBackgroundGeolocation()
 
@@ -373,12 +229,14 @@ const HealthRaiserApp = () => {
       onMotionChange.remove();
       onActivityChange.remove();
       onProviderChange.remove();
+      onHttpChange.remove();
+      onEnabledChange.remove();
     }
   }, []);
 
-  /// 3. start / stop BackgroundGeolocation
+  /// 3. Keep track of the backgroundgeo toggle state.
   React.useEffect(() => {
-    loadGeoEnabledState();
+    saveGeoEnabledState(bgGeoEnabled);
     if (bgGeoEnabled) {
       BackgroundGeolocation.start();
     } else {
@@ -391,38 +249,24 @@ const HealthRaiserApp = () => {
     <View style={styles.container}>
       <Text style={styles.title}>HealthKit Data Exporter</Text>
 
-      <View style={{alignItems:'center'}}>
-        <Text>Click to enable BackgroundGeolocation</Text>
-        <Switch value={bgGeoEnabled} onValueChange={setGeoEnabledState} />
-        {/* <Text style={{fontFamily:'Helvetica', fontSize:12, color:'#fff'}}>{location}</Text> */}
+      {/* Background Geolocation Toggle */}
+      <View style={{flexDirection: 'row', alignItems: 'center' }}>
+        <Text style={{color: "#FFF"}}>Enable Location Tracking  </Text>
+        <Switch value={bgGeoEnabled} onValueChange={setBgGeoEnabled} />
       </View>
 
+      {/* <View style={{flexDirection: 'row', alignItems: 'center' }}>
+        <Text style={{color: "#FFF"}}>Enable HealthKit Tracking  </Text>
+        <Switch value={bgGeoEnabled} onValueChange={setBgGeoEnabled} />
+      </View> */}
+
+      {/* Endpoing Definition */}
       <Button onPress={toggleModal} title="Set API Endpoint" />
 
-      <Modal
-        animationType="slide"
-        transparent={false}
-        visible={isModalVisible}
-        onRequestClose={toggleModal}
-      >
-        <View style={styles.modalContainer}>
-          <View style={styles.inputContainer}>
-            <Input
-              onChangeText={(text) => setApiEndpoint(text)}
-              value={apiEndpoint}
-              placeholder="Enter API_ENDPOINT..."
-            />
-            <TouchableOpacity onPress={() => saveApiEndpoint(apiEndpoint)} style={styles.saveButton}>
-              <Text style={styles.buttonText}>Save</Text>
-            </TouchableOpacity>
-          </View>
-          <Button onPress={toggleModal} title="Close" />
-        </View>
-      </Modal>
-
       {/* <Button onPress={handlePressGetAuthStatus} title="Healthkit Auth Status" /> */}
-      <Button onPress={exportHistoricalHealthData} title="Export Last 7 Days Data" />
-      {/* <Button onPress={testFunction} title="Test" /> */}
+      <Button onPress={handleHealthExportButtonPress} title="Force HealthKit Export" />
+      <Button onPress={handleLocationExportButtonPress} title="Force Locations Export" />
+      {/* <Button onPress={TODO} title="Export ALL HK data" /> */}
 
       {isLoading && (
         <ActivityIndicator
@@ -431,6 +275,52 @@ const HealthRaiserApp = () => {
           style={styles.loadingIndicator}
         />
       )}
+
+      <Text style={{color: "#FFF", marginTop: 20}}>Last Map Sync: {lastGeoSyncDate}</Text>
+      <Text style={{color: "#FFF"}}>Last HealthKit Sync: {lastHkSyncDate}</Text>
+
+      {/* 
+      
+      MODAL
+      
+      */}
+
+      <Modal
+        animationType="slide"
+        transparent={false}
+        visible={isModalVisible}
+        onRequestClose={toggleModal}
+      >
+        <View style={styles.modalContainer}>
+
+        <Text>HealthKit Endpoint</Text> 
+        <View style={styles.inputContainer}>
+          <Input
+            onChangeText={(text) => setApiEndpoint(text)}
+            value={apiEndpoint}
+            placeholder="Enter healthkit endpoing..."
+          />
+          </View>
+
+          <Text style={{justifyContent: "flex-start", alignItems: 'flex-start',}}>Maps Endpoint</Text>
+          <View style={styles.inputContainer}>
+            <Input
+              onChangeText={(text) => setGeoApiEndpoint(text)}
+              value={geoApiEndpoint}
+              placeholder="Enter Maps endpoint..."
+            />
+          </View>
+
+          <View style={{alignItems: 'flex-end'}}>
+            {/* <TouchableOpacity onPress={() => saveEndpoints(apiEndpoint, geoApiEndpoint)} style={styles.saveButton}>
+              <Text style={styles.buttonText}>Save</Text>
+            </TouchableOpacity> */}
+            <Button onPress={() => saveEndpoints(apiEndpoint, geoApiEndpoint)} title="Save" />
+            <Button onPress={toggleModal} title="Close" />
+          </View>
+
+        </View>
+      </Modal>
 
       <Toast />
     </View>
@@ -491,7 +381,7 @@ const styles = StyleSheet.create({
   modalContainer: {
     flex: 1,
     justifyContent: 'center',
-    alignItems: 'center',
+    // alignItems: 'center',
     padding: 16,
   },
 });
