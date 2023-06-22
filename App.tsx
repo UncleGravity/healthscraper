@@ -1,5 +1,10 @@
+// TODO: Export HK data in the background once per day.
+// Goal is to do everything in the background, so that the user doesn't have to open the app.
+// Maybe use uptimekuma to check if I haven't uploaded data in a while.
+
 import React, { useState, useEffect } from 'react';
 import {
+  Switch,
   View,
   Text,
   TouchableOpacity,
@@ -23,6 +28,23 @@ import axios from 'axios';
 
 import Button from './components/Button';
 import Input from './components/Input';
+
+import BackgroundGeolocation, {
+  Subscription,
+  State,
+  Config,
+  Location,
+  LocationError,
+  Geofence,
+  GeofenceEvent,
+  GeofencesChangeEvent,
+  HeartbeatEvent,
+  HttpEvent,
+  MotionActivityEvent,
+  MotionChangeEvent,
+  ProviderChangeEvent,
+  ConnectivityChangeEvent
+} from "react-native-background-geolocation";
 
 const API_ENDPOINT = 'https://b934-220-135-157-221.jp.ngrok.io/hkapi';
 // const API_ENDPOINT = 'https://b934-220-135-157-221.jp.ngrok.io/test';
@@ -260,9 +282,120 @@ const HealthRaiserApp = () => {
     }
   };
 
+  const configureBackgroundGeolocation = async () => {
+
+    let token = await BackgroundGeolocation.findOrCreateTransistorAuthorizationToken("vieratech", "unclegravity");
+
+    BackgroundGeolocation.ready({
+      // Geolocation Config
+      desiredAccuracy: BackgroundGeolocation.DESIRED_ACCURACY_NAVIGATION, // iOS only, change to DESIRED_ACCURACY_HIGH for cross-platform support.
+      distanceFilter: 10,
+      // Activity Recognition
+      stopTimeout: 5,
+      // Application config
+      debug: true, // <-- enable this hear sounds for background-geolocation life-cycle.
+      logLevel: BackgroundGeolocation.LOG_LEVEL_VERBOSE,
+      stopOnTerminate: false,   // <-- Allow the background-service to continue tracking when user closes the app.
+      startOnBoot: true,        // <-- Auto start tracking when device is powered-up.
+      // HTTP / SQLite config
+      // url: 'https://livelygrandstruct.angelviera.repl.co/geo',
+      url: 'https://edbd-220-135-157-221.ngrok-free.app/maps',
+      // url: 'https://tracker.transistorsoft.com/unclegravity',
+      batchSync: true,       // <-- [Default: false] If set to false, will cause error in my server, because my server expects a batch of locations (an array)
+      autoSync: true,         // <-- [Default: true] Set true to sync each location to server as it arrives.
+      maxBatchSize: 100,
+      autoSyncThreshold: 10,
+      headers: {              // <-- Optional HTTP headers
+        "X-FOO": "bar"
+      },
+      // transistorAuthorizationToken: token
+      // params: {               // <-- Optional HTTP params
+      //   "auth_token": "maybe_your_server_authenticates_via_token_YES?"
+      // }
+    }).then((state) => {
+      setBgGeoEnabled(state.enabled)
+      console.log("- BackgroundGeolocation is configured and ready: ", state.enabled);
+    });
+  };
+
+  const loadGeoEnabledState = async () => {
+    try {
+      const savedEnabledState = await AsyncStorage.getItem('BACKGROUND_GEOLOCATION_ENABLED');
+      if (savedEnabledState !== null) {
+        setBgGeoEnabled(savedEnabledState === 'true');
+        console.log("Loaded geo plugin state: " + savedEnabledState);
+      }
+    } catch (error) {
+      // Error handling; display an error message or handle it as necessary
+    }
+  };
+
+  const setGeoEnabledState = async (value: boolean) => {
+    try {
+      await AsyncStorage.setItem('BACKGROUND_GEOLOCATION_ENABLED', value.toString());
+      setBgGeoEnabled(value);
+      console.log("Saved geo plugin state: " + value);
+    } catch (error) {
+      // Error handling; display an error message or handle it as necessary
+    }
+  };
+
+  const [bgGeoEnabled, setBgGeoEnabled] = React.useState(false);
+  const [location, setLocation] = React.useState('');
+
+  React.useEffect(() => {
+    /// 1.  Subscribe to events.
+    const onLocation:Subscription = BackgroundGeolocation.onLocation((location) => {
+      console.log('[onLocation]', location);
+      setLocation(JSON.stringify(location, null, 2));
+    })
+
+    const onMotionChange:Subscription = BackgroundGeolocation.onMotionChange((event) => {
+      console.log('[onMotionChange]', event);
+    });
+
+    const onActivityChange:Subscription = BackgroundGeolocation.onActivityChange((event) => {
+      console.log('[onActivityChange]', event);
+    })
+
+    const onProviderChange:Subscription = BackgroundGeolocation.onProviderChange((event) => {
+      console.log('[onProviderChange]', event);
+    })
+
+    /// 2. ready the plugin.
+    configureBackgroundGeolocation()
+
+    return () => {
+      // Remove BackgroundGeolocation event-subscribers when the View is removed or refreshed
+      // during development live-reload.  Without this, event-listeners will accumulate with
+      // each refresh during live-reload.
+      onLocation.remove();
+      onMotionChange.remove();
+      onActivityChange.remove();
+      onProviderChange.remove();
+    }
+  }, []);
+
+  /// 3. start / stop BackgroundGeolocation
+  React.useEffect(() => {
+    loadGeoEnabledState();
+    if (bgGeoEnabled) {
+      BackgroundGeolocation.start();
+    } else {
+      BackgroundGeolocation.stop();
+      setLocation('');
+    }
+  }, [bgGeoEnabled]);
+
   return (
     <View style={styles.container}>
       <Text style={styles.title}>HealthKit Data Exporter</Text>
+
+      <View style={{alignItems:'center'}}>
+        <Text>Click to enable BackgroundGeolocation</Text>
+        <Switch value={bgGeoEnabled} onValueChange={setGeoEnabledState} />
+        {/* <Text style={{fontFamily:'Helvetica', fontSize:12, color:'#fff'}}>{location}</Text> */}
+      </View>
 
       <Button onPress={toggleModal} title="Set API Endpoint" />
 
