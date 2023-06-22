@@ -12,7 +12,7 @@ import BackgroundFetch from 'react-native-background-fetch';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Toast from 'react-native-toast-message';
 import axios from 'axios';
-
+import { pingStatusServer, KUMA_ENDPOINTS } from './kuma';
 // const API_ENDPOINT = 'https://b934-220-135-157-221.jp.ngrok.io/hkapi';
 // const API_ENDPOINT = 'https://b934-220-135-157-221.jp.ngrok.io/test';
 
@@ -126,7 +126,13 @@ const ALL_METRIC_TYPES = [
   // HKQuantityTypeIdentifier.atrialFibrillationBurden,
   // HKQuantityTypeIdentifier.underwaterDepth,
   // HKQuantityTypeIdentifier.waterTemperature,
-  // HKQuantityTypeIdentifier.appleSleepingWristTemperature
+  // HKQuantityTypeIdentifier.appleSleepingWristTemperature,
+//   HKQuantityTypeIdentifier.timeInDaylight,
+//   HKQuantityTypeIdentifier.physicalEffort,
+//   HKQuantityTypeIdentifier.cyclingSpeed,
+//   HKQuantityTypeIdentifier.cyclingPower,
+//   HKQuantityTypeIdentifier.cyclingFunctionalThresholdPower,
+//   HKQuantityTypeIdentifier.cyclingCadence
 ];
 
 const requestHealthKitAuthorization = async () => {
@@ -146,21 +152,27 @@ const requestHealthKitAuthorization = async () => {
     
 };
 
-const exportHistoricalHealthData = async (endpoint: string) => {
-    const days = 30;
-    const endDate = new Date(Date.now());
-    const startDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000); // 30 days ago
+const exportHistoricalHealthData = async (endpoint: string, fromDate?: Date, toDate?: Date) => {
+
+    if (!fromDate) {
+        const days = 30;
+        fromDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000); // 30 days ago
+    }
+
+    if (!toDate) {
+        toDate = new Date(Date.now());
+    }
 
     // random day in 2018
     // const startDate = new Date(2018, 6, 29);
     // const endDate = new Date(2018, 6, 30);
 
     const metrics = ALL_METRIC_TYPES.map((type) =>
-        HealthKit.queryQuantitySamples(type, { from: startDate, to: endDate })
+        HealthKit.queryQuantitySamples(type, { from: fromDate, to: toDate })
     );
 
     const categories = ALL_CATEGORY_TYPES.map((type) =>
-        HealthKit.queryCategorySamples(type, { from: startDate, to: endDate })
+        HealthKit.queryCategorySamples(type, { from: fromDate, to: toDate })
     );
 
     try {
@@ -177,6 +189,8 @@ const exportHistoricalHealthData = async (endpoint: string) => {
         },
         });
 
+        console.log("Saving LAST_HK_SYNC_DATE: " + toDate.toISOString())
+        AsyncStorage.setItem('LAST_HK_SYNC_DATE', toDate.toISOString());
         console.log(`Response status: ${response.status}, message: ${response.data}`);
         Toast.show({ text1: `Response status: ${response.status}, message: ${response.data}`, type: 'success' });
     } catch (error) {
@@ -185,40 +199,58 @@ const exportHistoricalHealthData = async (endpoint: string) => {
     }
 };
 
-// const configureBackgroundFetch = async () => {
-//     // Background fetch configuration options
-//     const fetchInterval = 60 * 12; // every 12 hours in minutes
-//     const minimumFetchInterval = fetchInterval / 60; // in hours
+const configureHealthKitBackgroundFetch = async () => {
+    // Background fetch configuration options
+    const fetchInterval = 60 * 12; // every 12 hours in minutes
+    // const minimumFetchInterval = fetchInterval / 60; // in hours
   
-//     // Initialize background fetch
-//     await BackgroundFetch.configure(
-//       {
-//         minimumFetchInterval,
-//         stopOnTerminate: false, // Probably only works on Android
-//         startOnBoot: true, // Probably only works on Android
-//       },
-//       async (taskId) => {
-//         console.log('[BackgroundFetch] taskId:', taskId);
+    console.log('[BackgroundFetch] configureHealthKitBackgroundFetch');
+    // Initialize background fetch
+    await BackgroundFetch.configure(
+      {
+        // minimumFetchInterval: fetchInterval, // Leaving this set to default (15 mins), to see if background geo stuff wakes it up
+        stopOnTerminate: false, // Probably only works on Android
+        startOnBoot: true, // Probably only works on Android
+      },
+      async (taskId) => {
+        console.log('[BackgroundFetch] taskId:', taskId);
   
-//         const storedEndpoint = await AsyncStorage.getItem('API_ENDPOINT') || '';
-//         await exportHistoricalHealthData(storedEndpoint);
+        const storedEndpoint = await AsyncStorage.getItem('API_ENDPOINT') || '';
+        if (storedEndpoint) {
+
+            const lastSyncDate = await AsyncStorage.getItem('LAST_HK_SYNC_DATE');
+            let fromDate = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000); // 2 days ago
+
+            if (lastSyncDate !== null) {
+                fromDate = new Date(lastSyncDate);
+            }
+
+            const toDate = new Date(Date.now());
+            await exportHistoricalHealthData(storedEndpoint, fromDate, toDate);
+            await AsyncStorage.setItem('LAST_HK_SYNC_DATE', toDate.toISOString());
+
+            pingStatusServer(KUMA_ENDPOINTS.healthkit);
+        } else {
+            console.log('No API endpoint configured, skipping background fetch');
+        }
   
-//         console.log('[BackgroundFetch] Complete!');
-//         BackgroundFetch.finish(taskId);
-//       },
-//       (error) => {
-//         console.log('BackgroundFetch failed to start:', error);
-//       },
-//     );
+        console.log('[BackgroundFetch] Complete!');
+        BackgroundFetch.finish(taskId);
+      },
+      (error) => {
+        console.log('[BackgroundFetch] failed to start:', error);
+      },
+    );
   
-//     // Query the status of your background fetch
-//     const status = await BackgroundFetch.status();
-//     console.log('BackgroundFetch status:', status);
-//   };
+    // Query the status of your background fetch
+    const status = await BackgroundFetch.status();
+    console.log('[BackgroundFetch] status:', status);
+  };
 
 export {
     ALL_METRIC_TYPES,
     ALL_CATEGORY_TYPES,
     requestHealthKitAuthorization,
-    exportHistoricalHealthData
+    exportHistoricalHealthData,
+    configureHealthKitBackgroundFetch
   };

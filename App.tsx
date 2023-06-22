@@ -54,7 +54,8 @@ import {
   ALL_METRIC_TYPES,
   ALL_CATEGORY_TYPES,
   requestHealthKitAuthorization,
-  exportHistoricalHealthData
+  exportHistoricalHealthData,
+  configureHealthKitBackgroundFetch
 } from './components/healthkit';
 
 import {
@@ -62,6 +63,8 @@ import {
   loadGeoEnabledState,
   saveGeoEnabledState,
 } from './components/background-geolocation';
+
+import { pingStatusServer, KUMA_ENDPOINTS } from './components/kuma';
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -79,7 +82,12 @@ const HealthRaiserApp = () => {
 
   useEffect(() => {
     requestHealthKitAuthorization();
+    configureHealthKitBackgroundFetch();
     loadAsyncStorageData();
+  }, []);
+
+  useEffect(() => {
+    // Initial background fetch configuration
   }, []);
 
   const toggleModal = () => {
@@ -153,7 +161,27 @@ const HealthRaiserApp = () => {
       return;
     }
     setIsLoading(true);
-    await exportHistoricalHealthData(apiEndpoint);
+    const storedEndpoint = await AsyncStorage.getItem('API_ENDPOINT') || '';
+    if (storedEndpoint) {
+
+        const lastSyncDate = await AsyncStorage.getItem('LAST_HK_SYNC_DATE');
+        let fromDate = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000); // 2 days ago
+
+        if (lastSyncDate !== null) {
+            fromDate = new Date(lastSyncDate);
+            console.log('Last sync date found: ' + fromDate.toISOString());
+        } else {
+          console.log('No last sync date found, using default value (2 days)');
+        }
+
+        const toDate = new Date(Date.now());
+        await exportHistoricalHealthData(storedEndpoint, fromDate, toDate);
+        await AsyncStorage.setItem('LAST_HK_SYNC_DATE', toDate.toISOString());
+    } else {
+        console.log('No API endpoint configured, skipping background fetch');
+    }
+
+    // await exportHistoricalHealthData(apiEndpoint);
     setIsLoading(false);
   };
 
@@ -176,6 +204,18 @@ const HealthRaiserApp = () => {
       console.log("[sync] FAILURE: ", error);
       Toast.show({ text1: 'Sync failure', type: 'error' });
     });
+  }
+
+  const handleHealthExportAllButtonPress = async () => {
+    if (!apiEndpoint) {
+      Toast.show({ text1: 'Please enter an API endpoint', type: 'error' });
+      return;
+    }
+    setIsLoading(true);
+    const fromDate = new Date(2010, 1, 1);
+    const toDate = new Date(Date.now());
+    await exportHistoricalHealthData(apiEndpoint, fromDate, toDate);
+    setIsLoading(false);
   }
   ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
   // GEO STUFF
@@ -237,6 +277,7 @@ const HealthRaiserApp = () => {
   /// 3. Keep track of the backgroundgeo toggle state.
   React.useEffect(() => {
     saveGeoEnabledState(bgGeoEnabled);
+    // loadAsyncStorageData();
     if (bgGeoEnabled) {
       BackgroundGeolocation.start();
     } else {
@@ -261,12 +302,11 @@ const HealthRaiserApp = () => {
       </View> */}
 
       {/* Endpoing Definition */}
-      <Button onPress={toggleModal} title="Set API Endpoint" />
+      <Button onPress={toggleModal} title="Set Endpoints" />
 
       {/* <Button onPress={handlePressGetAuthStatus} title="Healthkit Auth Status" /> */}
       <Button onPress={handleHealthExportButtonPress} title="Force HealthKit Export" />
       <Button onPress={handleLocationExportButtonPress} title="Force Locations Export" />
-      {/* <Button onPress={TODO} title="Export ALL HK data" /> */}
 
       {isLoading && (
         <ActivityIndicator
@@ -293,7 +333,9 @@ const HealthRaiserApp = () => {
       >
         <View style={styles.modalContainer}>
 
-        <Text>HealthKit Endpoint</Text> 
+        <Button onPress={handleHealthExportAllButtonPress} title="Export ALL HK data (SLOW)" />
+
+        <Text style={{marginTop: 50}}>HealthKit Endpoint</Text> 
         <View style={styles.inputContainer}>
           <Input
             onChangeText={(text) => setApiEndpoint(text)}
