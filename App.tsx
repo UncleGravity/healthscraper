@@ -2,6 +2,14 @@
 // Goal is to do everything in the background, so that the user doesn't have to open the app.
 // Maybe use uptimekuma to check if I haven't uploaded data in a while.
 
+
+// TODO:
+// - Export ALL doesn't work. It's too much data. Need to export in batches.
+// - Location tragging toggle state isn't persisting.
+// - Need to figure out how to export data in the background. Will probably need to use a native module using healthkit background delivery. 
+//    - https://stackoverflow.com/questions/26375767/healthkit-background-delivery-when-app-is-not-running/30577456#30577456
+// 
+
 import React, { useState, useEffect } from 'react';
 
 import {
@@ -14,16 +22,6 @@ import {
   Modal,
   Keyboard,
 } from 'react-native';
-
-import HealthKit, {
-  HKUnit,
-  HKQuantityTypeIdentifier,
-  HKCategoryTypeIdentifier,
-  HKUnits,
-  HKStatisticsOptions,
-  GenericQueryOptions,
-  UnitOfTime,
-} from '@kingstinct/react-native-healthkit';
 
 import Toast from 'react-native-toast-message';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -48,25 +46,20 @@ import BackgroundGeolocation, {
   ConnectivityChangeEvent
 } from "react-native-background-geolocation";
 
-import BackgroundFetch from 'react-native-background-fetch';
+import styles from './components/styles';
 
 import {
-  ALL_METRIC_TYPES,
-  ALL_CATEGORY_TYPES,
-  requestHealthKitAuthorization,
   exportHistoricalHealthData,
-  configureHealthKitBackgroundFetch
+  HealthKitProvider,
 } from './components/healthkit';
 
 import {
   configureBackgroundGeolocation,
-  loadGeoEnabledState,
   saveGeoEnabledState,
 } from './components/background-geolocation';
 
 import { pingStatusServer, KUMA_ENDPOINTS } from './components/kuma';
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // APP
 const HealthRaiserApp = () => {
@@ -80,14 +73,9 @@ const HealthRaiserApp = () => {
   const [hkSyncEnabled, setHkSyncEnabled] = useState(false);
   const [location, setLocation] = useState('');
 
-  useEffect(() => {
-    requestHealthKitAuthorization();
-    configureHealthKitBackgroundFetch();
+  React.useEffect(() => {
+    console.log("THIS SHOULD ONLY SHOW UP ONCE")
     loadAsyncStorageData();
-  }, []);
-
-  useEffect(() => {
-    // Initial background fetch configuration
   }, []);
 
   const toggleModal = () => {
@@ -118,7 +106,10 @@ const HealthRaiserApp = () => {
         setLastHkSyncDate(storedLastHkSyncDate);
       }
       if (storedBgGeoEnabled !== null) {
+        console.log("[loadAsyncStorageData] BG_GEO_ENABLED: " + JSON.parse(storedBgGeoEnabled))
         setBgGeoEnabled(JSON.parse(storedBgGeoEnabled));
+      } else {
+        console.log("[loadAsyncStorageData] BG_GEO_ENABLED is null")
       }
       if (storedHkSyncEnabled !== null) {
         setHkSyncEnabled(JSON.parse(storedHkSyncEnabled));
@@ -154,7 +145,7 @@ const HealthRaiserApp = () => {
   };
 
   ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-  // FUNC: EXPORT DATA
+  // HANDLE BUTTON AND TOGGLE SWITCH
   const handleHealthExportButtonPress = async () => {
     if (apiEndpoint === '') {
       Toast.show({ text1: 'Please enter an API endpoint', type: 'error' });
@@ -217,6 +208,13 @@ const HealthRaiserApp = () => {
     await exportHistoricalHealthData(apiEndpoint, fromDate, toDate);
     setIsLoading(false);
   }
+
+  const handleLocationToggle = async (state: boolean) => {
+    console.log("handleLocationToggle: " + state);
+    saveGeoEnabledState(state);
+    setBgGeoEnabled(state);
+  }
+
   ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
   // GEO STUFF
 
@@ -250,7 +248,8 @@ const HealthRaiserApp = () => {
         console.log("Data uploaded successfully");
         const now = new Date().toISOString();
         AsyncStorage.setItem('LAST_GEO_SYNC_DATE', now);
-        setLastGeoSyncDate(now);
+        // setLastGeoSyncDate(now);
+        pingStatusServer(KUMA_ENDPOINTS.geo);
       }
     });
 
@@ -276,7 +275,7 @@ const HealthRaiserApp = () => {
 
   /// 3. Keep track of the backgroundgeo toggle state.
   React.useEffect(() => {
-    saveGeoEnabledState(bgGeoEnabled);
+    // console.log("Saving GEO_ENABLED: " + bgGeoEnabled + " to AsyncStorage")
     // loadAsyncStorageData();
     if (bgGeoEnabled) {
       BackgroundGeolocation.start();
@@ -293,7 +292,7 @@ const HealthRaiserApp = () => {
       {/* Background Geolocation Toggle */}
       <View style={{flexDirection: 'row', alignItems: 'center' }}>
         <Text style={{color: "#FFF"}}>Enable Location Tracking  </Text>
-        <Switch value={bgGeoEnabled} onValueChange={setBgGeoEnabled} />
+        <Switch value={bgGeoEnabled} onValueChange={handleLocationToggle} />
       </View>
 
       {/* <View style={{flexDirection: 'row', alignItems: 'center' }}>
@@ -318,6 +317,8 @@ const HealthRaiserApp = () => {
 
       <Text style={{color: "#FFF", marginTop: 20}}>Last Map Sync: {lastGeoSyncDate}</Text>
       <Text style={{color: "#FFF"}}>Last HealthKit Sync: {lastHkSyncDate}</Text>
+      <HealthKitProvider>
+      </HealthKitProvider>
 
       {/* 
       
@@ -368,64 +369,5 @@ const HealthRaiserApp = () => {
     </View>
   );
 };
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 16,
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginBottom: 20,
-  },
-  inputContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
-    width: '100%',
-  },
-  input: {
-    flex: 1,
-    borderColor: 'gray',
-    borderWidth: 1,
-    borderRadius: 5,
-    marginRight: 10,
-    paddingLeft: 8,
-    backgroundColor: 'white',
-    fontSize: 16,
-    color: 'black',
-    height: 40,
-  },
-  saveButton: {
-    backgroundColor: 'purple',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 5,
-  },
-  buttonText: {
-    color: 'white',
-    fontSize: 16,
-  },
-  button: {
-    backgroundColor: '#4CAF50',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 5,
-    marginTop: 20,
-  },
-  loadingIndicator: {
-    marginTop: 20,
-  },
-  modalContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    // alignItems: 'center',
-    padding: 16,
-  },
-});
 
 export default HealthRaiserApp;

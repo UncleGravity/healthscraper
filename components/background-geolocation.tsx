@@ -59,7 +59,7 @@ const configureBackgroundGeolocation = async () => {
 
 const loadGeoEnabledState = async (): Promise<boolean> => {
   try {
-    const savedEnabledState = await AsyncStorage.getItem('BACKGROUND_GEOLOCATION_ENABLED');
+    const savedEnabledState = await AsyncStorage.getItem('BG_GEO_ENABLED');
     if (savedEnabledState !== null) {
       // setBgGeoEnabled(savedEnabledState === 'true');
       console.log("FIRST: Loaded geo plugin state: " + savedEnabledState);
@@ -76,8 +76,8 @@ const loadGeoEnabledState = async (): Promise<boolean> => {
 
 const saveGeoEnabledState = async (value: boolean) => {
   try {
-    await AsyncStorage.setItem('BACKGROUND_GEOLOCATION_ENABLED', value.toString());
-    console.log("Saved geo plugin state: " + value);
+    await AsyncStorage.setItem('BG_GEO_ENABLED', value.toString());
+    console.log("Saved geo plugin state: " + value.toString());
     return value;
   } catch (error) {
     // Error handling; display an error message or handle it as necessary
