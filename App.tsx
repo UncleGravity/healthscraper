@@ -1,17 +1,13 @@
-// TODO: Export HK data in the background once per day.
-// Goal is to do everything in the background, so that the user doesn't have to open the app.
-// Maybe use uptimekuma to check if I haven't uploaded data in a while.
-
 
 // TODO:
-// - Export ALL doesn't work. It's too much data. Need to export in batches.
-// - Location tragging toggle state isn't persisting.
-// - Need to figure out how to export data in the background. Will probably need to use a native module using healthkit background delivery. 
-//    - https://stackoverflow.com/questions/26375767/healthkit-background-delivery-when-app-is-not-running/30577456#30577456
-// 
+// 1. HealthKit background observers are behaving weird. They behave normally in the foreground, in the background they fire many times in a row. 
+// 2. Add a date range to export button.
+// 3. Add enable/disable toggle switch for HealthKit sync.
+// 4. Enable/disable every HK type individually using a dropdown menu.
+// 5. Do an API endpoint health check.
+// 6. Make UI not suck.
 
 import React, { useState, useEffect } from 'react';
-
 import {
   Switch,
   View,
@@ -25,9 +21,6 @@ import {
 
 import Toast from 'react-native-toast-message';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
-import Button from './components/Button';
-import Input from './components/Input';
 
 import BackgroundGeolocation, {
   Subscription,
@@ -46,11 +39,14 @@ import BackgroundGeolocation, {
   ConnectivityChangeEvent
 } from "react-native-background-geolocation";
 
+import Button from './components/Button';
+import Input from './components/Input';
 import styles from './components/styles';
 
 import {
+  requestHealthKitAuthorization,
+  configureHealthKitBackgroundDelivery,
   exportHistoricalHealthData,
-  HealthKitProvider,
 } from './components/healthkit';
 
 import {
@@ -58,12 +54,14 @@ import {
   saveGeoEnabledState,
 } from './components/background-geolocation';
 
+import { displayNotification, configureNotifications } from './components/notifications';
 import { pingStatusServer, KUMA_ENDPOINTS } from './components/kuma';
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // APP
 const HealthRaiserApp = () => {
   const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingModal, setIsLoadingModal] = useState(false);
   const [apiEndpoint, setApiEndpoint] = useState('');
   const [geoApiEndpoint, setGeoApiEndpoint] = useState('');
   const [isModalVisible, setIsModalVisible] = useState(false);
@@ -73,9 +71,24 @@ const HealthRaiserApp = () => {
   const [hkSyncEnabled, setHkSyncEnabled] = useState(false);
   const [location, setLocation] = useState('');
 
+  const setup = async () => {
+    console.log("WELCOME: THIS SHOULD ONLY SHOW UP ONCE");
+    await configureNotifications();
+    await loadAsyncStorageData();
+    await requestHealthKitAuthorization();
+    await configureHealthKitBackgroundDelivery();
+  };
+
   React.useEffect(() => {
-    console.log("THIS SHOULD ONLY SHOW UP ONCE")
-    loadAsyncStorageData();
+    setup();
+
+    const onLocation:Subscription = BackgroundGeolocation.onLocation((location) => {
+      console.log('[onLocation]', location);
+      displayNotification('AV Location', "Location listener fired in the background!");
+      // const now = new Date().toISOString();
+      // AsyncStorage.setItem('LAST_GEO_SYNC_DATE', now);
+    });
+
   }, []);
 
   const toggleModal = () => {
@@ -100,10 +113,12 @@ const HealthRaiserApp = () => {
         setGeoApiEndpoint(storedGeoApiEndpoint);
       }
       if (storedLastGeoSyncDate !== null) {
-        setLastGeoSyncDate(storedLastGeoSyncDate);
+        // Make sure to use the local timezone when displaying the date
+        setLastGeoSyncDate( (new Date(storedLastGeoSyncDate)).toLocaleString());
       }
       if (storedLastHkSyncDate !== null) {
-        setLastHkSyncDate(storedLastHkSyncDate);
+        // Make sure to use the local timezone when displaying the date
+        setLastHkSyncDate( (new Date(storedLastHkSyncDate)).toLocaleString());
       }
       if (storedBgGeoEnabled !== null) {
         console.log("[loadAsyncStorageData] BG_GEO_ENABLED: " + JSON.parse(storedBgGeoEnabled))
@@ -172,7 +187,8 @@ const HealthRaiserApp = () => {
         console.log('No API endpoint configured, skipping background fetch');
     }
 
-    // await exportHistoricalHealthData(apiEndpoint);
+    await configureHealthKitBackgroundDelivery();
+
     setIsLoading(false);
   };
 
@@ -195,35 +211,57 @@ const HealthRaiserApp = () => {
       console.log("[sync] FAILURE: ", error);
       Toast.show({ text1: 'Sync failure', type: 'error' });
     });
-  }
+  };
 
   const handleHealthExportAllButtonPress = async () => {
     if (!apiEndpoint) {
-      Toast.show({ text1: 'Please enter an API endpoint', type: 'error' });
-      return;
+        Toast.show({ text1: 'Please enter an API endpoint', type: 'error' });
+        return;
     }
-    setIsLoading(true);
-    const fromDate = new Date(2010, 1, 1);
-    const toDate = new Date(Date.now());
-    await exportHistoricalHealthData(apiEndpoint, fromDate, toDate);
-    setIsLoading(false);
-  }
+    setIsLoadingModal(true);
+    // let fromDate = new Date(2010, 0, 1);
+    let fromDate = new Date(2018,7, 8);
+    let toDate = new Date(Date.now());
+
+    while (fromDate < toDate) {
+        const nextWeek = new Date(fromDate);
+        nextWeek.setDate(fromDate.getDate() + 7);
+
+        // Limit the nextWeek date to the current toDate if it goes beyond that date
+        if (nextWeek >= toDate) {
+            nextWeek.setTime(toDate.getTime());
+        }
+
+        // Log the current from-to dates
+        console.log(`Exporting data from ${fromDate.toISOString().slice(0, 10)} to ${nextWeek.toISOString().slice(0, 10)}`);
+
+        await exportHistoricalHealthData(apiEndpoint, fromDate, nextWeek);
+
+        fromDate.setDate(fromDate.getDate() + 7);
+    }
+
+    console.log("Full Export Done")
+
+    await configureHealthKitBackgroundDelivery();
+
+    setIsLoadingModal(false);
+  };
 
   const handleLocationToggle = async (state: boolean) => {
     console.log("handleLocationToggle: " + state);
     saveGeoEnabledState(state);
     setBgGeoEnabled(state);
-  }
+  };
 
   ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
   // GEO STUFF
 
   React.useEffect(() => {
-    /// 1.  Subscribe to events.
-    const onLocation:Subscription = BackgroundGeolocation.onLocation((location) => {
-      console.log('[onLocation]', location);
-      setLocation(JSON.stringify(location, null, 2));
-    })
+    /// 1.  Subscribe to events. For debugging?
+    // const onLocation:Subscription = BackgroundGeolocation.onLocation((location) => {
+    //   console.log('[onLocation]', location);
+    //   setLocation(JSON.stringify(location, null, 2));
+    // })
 
     const onMotionChange:Subscription = BackgroundGeolocation.onMotionChange((event) => {
       console.log('[onMotionChange]', event);
@@ -264,7 +302,7 @@ const HealthRaiserApp = () => {
       // Remove BackgroundGeolocation event-subscribers when the View is removed or refreshed
       // during development live-reload.  Without this, event-listeners will accumulate with
       // each refresh during live-reload.
-      onLocation.remove();
+      // onLocation.remove();
       onMotionChange.remove();
       onActivityChange.remove();
       onProviderChange.remove();
@@ -300,7 +338,7 @@ const HealthRaiserApp = () => {
         <Switch value={bgGeoEnabled} onValueChange={setBgGeoEnabled} />
       </View> */}
 
-      {/* Endpoing Definition */}
+      {/* Endpoint Definition */}
       <Button onPress={toggleModal} title="Set Endpoints" />
 
       {/* <Button onPress={handlePressGetAuthStatus} title="Healthkit Auth Status" /> */}
@@ -317,8 +355,6 @@ const HealthRaiserApp = () => {
 
       <Text style={{color: "#FFF", marginTop: 20}}>Last Map Sync: {lastGeoSyncDate}</Text>
       <Text style={{color: "#FFF"}}>Last HealthKit Sync: {lastHkSyncDate}</Text>
-      <HealthKitProvider>
-      </HealthKitProvider>
 
       {/* 
       
@@ -335,6 +371,13 @@ const HealthRaiserApp = () => {
         <View style={styles.modalContainer}>
 
         <Button onPress={handleHealthExportAllButtonPress} title="Export ALL HK data (SLOW)" />
+        {isLoadingModal && (
+        <ActivityIndicator
+          size="large"
+          color="#0000ff"
+          style={styles.loadingIndicator}
+        />
+      )}
 
         <Text style={{marginTop: 50}}>HealthKit Endpoint</Text> 
         <View style={styles.inputContainer}>

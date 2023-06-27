@@ -9,10 +9,12 @@
     "start": "react-native start",
     "test": "jest",
     "clean": "rm -rf ./ios/build",
+    "clean-watchman": "watchman watch-del-all && watchman shutdown-server",
     "deploy": "FORCE_BUNDLING=true yarn run ios"
   },
   "dependencies": {
     "@kingstinct/react-native-healthkit": "^7.0.3",
+    "@notifee/react-native": "^7.8.0",
     "@react-native-async-storage/async-storage": "^1.18.2",
     "axios": "^1.4.0",
     "react": "18.2.0",
